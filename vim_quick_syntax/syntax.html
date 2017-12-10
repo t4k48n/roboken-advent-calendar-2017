@@ -1,0 +1,88 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title>行儀の良いVimのシンタックスハイライトの書き方</title>
+  <style type="text/css">code{white-space: pre;}</style>
+</head>
+<body>
+<div id="header">
+<h1 class="title">行儀の良いVimのシンタックスハイライトの書き方</h1>
+</div>
+<h1 id="この記事を書いたきっかけ">この記事を書いたきっかけ</h1>
+<p>先日，情報・プログラミング演習のTAをしているときに次のコードに遭遇しました．</p>
+<pre><code>#include &lt;stdio.h&gt;
+
+int main(void) {
+    int a[2][3] = {
+        1, 2, 3,
+        4, 5, 6
+        },
+        b[3][3] = {
+        1, 2, 3,
+        4, 5, 6,
+        7, 8, 9
+        },
+        c[2][3];
+    int i, j, k;
+    for (i = 0; i &lt; 2; i++) {
+        for (j = 0; j &lt; 3; j++) {
+            c[i][j] = 0;
+            for (k = 0; k &lt; 3; k++);{
+                c[i][j] += a[i][k] * b[k][j];
+            }
+        }
+    }
+    for (i = 0; i &lt; 2; i++) {
+        for (j = 0; j &lt; 3; j++) {
+            printf(&quot;%5d&quot;, c[i][j]);
+        }
+        printf(&quot;\n&quot;);
+    }
+    return 0;
+}</code></pre>
+<p>2次元配列<code>a</code>, <code>b</code>の行列積を2次元配列<code>c</code>に格納するこのプログラムは，実行してみると<code>c</code>がむちゃくちゃな値になるか，異常終了します．気がつけば簡単なのですが，このエラーは18行目の<code>)</code>と<code>{</code>の間に<code>;</code>が挟まることで19行目で<code>a[i][3]</code>および<code>b[3][j]</code>という設計者が意図していない領域へのアクセスが生じることにより発生しています．</p>
+<p>こんなのぱっと見でわかるわけないです．次回からすぐ発見できるように<code>);{</code>をバグであると決めつけ，Vim上でエラーとして強調表示する設定を書くことにしました．この記事ではバグ部分の強調表示の設定を通して，Vimのシンタックスハイライトとその設定方法について説明します．</p>
+<h1 id="バグ部分の選択">バグ部分の選択</h1>
+<p>強調表示を行うためにはVimに対して強調表示する部分を指示する必要があります．次のようなコードの波線部をバグ部分として指定することにします．</p>
+<pre><code>if (...);{...}
+       ~~~
+
+for (...) ;{...}
+        ~~~~
+
+while (...);  {...}
+          ~~~~~</code></pre>
+<p>特定の文字列パターンをまとめて指定する方法として，Vimは正規表現を備えています．上の例は，次の正規表現で指定することができます．</p>
+<pre><code>/) *; *{/</code></pre>
+<p><code>/) *; *{</code>で検索してみてください．バグ部分がヒットすれば正規表現で上手くバグ部分を指定できていることになります．</p>
+<h1 id="バグ部分をエラー箇所として定義する">バグ部分をエラー箇所として定義する</h1>
+<p>取りあえずの設定場所として<code>vimrc</code>に次のコマンドを追加します．</p>
+<pre><code>syntax match cParenBraceError &quot;) *; *{&quot;
+highlight link cParenBraceError cError</code></pre>
+<p><code>:syntax</code>コマンドは<code>&quot;...&quot;</code>内のパターンに該当する部分を構文グループ<code>cParenBraceError</code>に登録し，<code>:highlight</code>コマンドは<code>cParenBraceError</code>を別の構文グループ<code>cError</code>にリンクします．構文グループ<code>cError</code>はさらに，<code>$VIMRUNTIME/syntax/c.vim</code>内で次のように<code>Error</code>へのリンクとして定義されています．</p>
+<pre><code>hi def link cError      Error</code></pre>
+<p>つまりバグ部分は下図の経路を経て，最終的に<code>Error</code>にリンクされます．</p>
+<pre><code>+---------+    +------------------+    +--------+    +-------+
+| ) *; *{ |---&gt;| cParenBraceError |---&gt;| cError |---&gt;| Error |
++---------+    +------------------+    +--------+    +-------+</code></pre>
+<p><code>Error</code>は多くのカラースキームが対応する優先ハイライトグループの1つです（<code>:help group-name</code>参照）．<code>Error</code>に繋ぐことで導入しているカラースキームで定義されている，エラーについてのハイライト表示がバグ部分にも適用されるようになります．</p>
+<p><code>:source $MYVIMRC&lt;CR&gt;</code>で<code>vimrc</code>を再読込して，バグ部分を含んだ<code>*.c</code>ファイルを開いてみましょう．設定が上手く行っていれば，該当部分が強調表示されます．このときのスタイルは現在読み込んでいるカラースキームによって変化します．Solarizedの場合は赤い太字で表示されます．</p>
+<h1 id="設定の分割">設定の分割</h1>
+<p>以上でバグ部分の強調という目的は達成されましたが，強調する項目が<code>vimrc</code>に 増えていくと可読性がどんどん下がってしまいます．この問題に対してVimはファイルを分割する方法として，<strong>ランタイムディレクトリ</strong>という仕組みを用意しています．ランタイムディレクトリ以下に指定された構造で設定ファイルを設置することで自動的にそれらが読み込まれます．Vimに登録されているランタイムディレクトリは次のコマンドを入力することで確認することができます．</p>
+<pre><code>set runtimepath?</code></pre>
+<p>私のVimでは<code>runtimepath</code>の内容は次のようになっています．</p>
+<pre><code>runtimepath=~/.vim,/usr/share/vim/vimfiles,/usr/share/vim/vim80,/usr/share/vim/vimfiles/after,~/.vim/after</code></pre>
+<p>Windowsユーザの場合は<code>.vim</code>の部分が<code>vimfiles</code>になっていると思います．</p>
+<p>既存のCの構文設定に対して新しく設定を追加する場合は<code>~/.vim/after/syntax/c.vim</code>というファイルに書き込むことが決まっています（<code>:help mysyntaxfile-add</code>参照）のでそこにファイルを作成して先程<code>vimrc</code>に書き込んだ2行を<code>c.vim</code>に移動しましょう．これで分割は完了です．<code>~/.vim/after</code>以下には<code>syntax</code>のほかにも次のような設定ファイルを設置することができます．</p>
+<pre><code>~/.vim/after/plugin/    : グローバルなプラグインを記述する
+~/.vim/after/ftplugin/  : ファイルタイプ毎のプラグインを記述する
+~/.vim/after/indent/    : ファイルタイプ毎のインデント設定を記述する</code></pre>
+<p>今回のように既存の設定に新たな設定を追加する場合，<code>~/.vim/syntax</code>にファイルを設置することは適切ではありません．設定ファイルは<code>runtimepath</code>内の先頭のディレクトリから順番に読み込まれます．そのため<code>~/.vim</code>の設定はこれに続く<code>/usr/share...</code>などによって上書きされたり，既存の設定に悪影響をおよぼします．</p>
+<h1 id="まとめ">まとめ</h1>
+<p>簡単な実例を通してハイライト設定の方法を説明しました．ほかにもインデント設定や補完設定もVimの標準の機能の範囲内で追加することができます．Vimに機能追加をするためにプラグインを入れる前に，その目的が標準の機能で達成できないか考えてみることをおすすめします．</p>
+<p>ハイライト以外の設定方法が知りたければ，気兼ねなくコメント欄で質問してください．</p>
+</body>
+</html>
