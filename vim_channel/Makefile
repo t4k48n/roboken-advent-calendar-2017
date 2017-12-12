@@ -1,12 +1,6 @@
-all: draft.html server simpleechoback
+all: draft.html
 
 draft.html: draft.md
-	pandoc -s -thtml5 -o draft.html draft.md
-
-server: server.go
-	go build server.go
-
-simpleechoback: simpleechoback.go
-	go build simpleechoback.go
+	cat pandoc_head.md draft.md | pandoc -s -t html5 -o draft.html
 
 .PHONY: all
